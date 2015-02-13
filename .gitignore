@@ -1,0 +1,4 @@
+*.o
+*.so
+server
+*.sw[op]
