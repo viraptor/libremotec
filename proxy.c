@@ -141,6 +141,8 @@ int close(int fildes) {
         int ret = call_remote_close(remote_fd);
         if (ret == -1) {
             errno = remote_errno;
+        } else {
+            remote_fds[fildes - REMOTE_FD_SHIFT] = 0;
         }
         return ret;
     }
