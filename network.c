@@ -134,7 +134,7 @@ rc_type remote_recv_syscall() {
 char* remote_recv_string() {
     size_t len = remote_recv_size_t();
     char *res = malloc(len);
-    int ret = recv(remote_conn, res, len, 0);
+    int ret = recv_all(remote_conn, res, len, 0);
     if (ret == -1) {
         free(res);
         perror("receiving string failed");
@@ -144,7 +144,7 @@ char* remote_recv_string() {
 }
 
 void remote_recv_data(void *dest, size_t len) {
-    int ret = recv(remote_conn, dest, len, 0);
+    int ret = recv_all(remote_conn, dest, len, 0);
     if (ret == -1) {
         perror("receiving data failed");
         exit(EXIT_FAILURE);
@@ -153,7 +153,7 @@ void remote_recv_data(void *dest, size_t len) {
 
 size_t remote_recv_size_t() {
     size_t res = 0;
-    int ret = recv(remote_conn, &res, sizeof(res), 0);
+    int ret = recv_all(remote_conn, &res, sizeof(res), 0);
     if (ret == -1) {
         perror("receiving size_t failed");
         exit(EXIT_FAILURE);
@@ -163,7 +163,7 @@ size_t remote_recv_size_t() {
 
 int remote_recv_int() {
     int res = 0;
-    int ret = recv(remote_conn, &res, sizeof(ret), 0);
+    int ret = recv_all(remote_conn, &res, sizeof(ret), 0);
     if (ret == -1) {
         perror("receiving int failed");
         exit(EXIT_FAILURE);
