@@ -9,6 +9,26 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 
+#define GEN_RECV_GENERIC(TYPE, NAME) \
+    TYPE remote_recv_##NAME() { \
+        TYPE res = 0; \
+        int ret = recv_all(remote_conn, &res, sizeof(res), 0); \
+        if (ret == -1) { \
+            perror("receiving " #NAME " failed"); \
+            exit(EXIT_FAILURE); \
+        } \
+        return res; \
+    }
+
+#define GEN_SEND_GENERIC(TYPE, NAME) \
+    void remote_send_##NAME(TYPE arg) { \
+        int ret = send(remote_conn, &arg, sizeof(arg), 0); \
+        if (ret == -1) { \
+            perror("sending " #NAME " argument failed"); \
+            exit(EXIT_FAILURE); \
+        } \
+    }
+
 static int remote_conn = -1;
 
 static ssize_t recv_all(int socket, void *buffer, size_t length, int flags) {
@@ -24,6 +44,14 @@ static ssize_t recv_all(int socket, void *buffer, size_t length, int flags) {
     }
     return total;
 }
+
+GEN_SEND_GENERIC(rc_type, syscall)
+GEN_SEND_GENERIC(int, int)
+GEN_SEND_GENERIC(size_t, size_t)
+
+GEN_RECV_GENERIC(rc_type, syscall)
+GEN_RECV_GENERIC(size_t, size_t)
+GEN_RECV_GENERIC(int, int)
 
 void remote_ensure() {
     if (remote_conn != -1) {
@@ -74,32 +102,8 @@ void remote_listen() {
     }
 }
 
-void remote_send_syscall(rc_type rc) {
-    int ret = send(remote_conn, &rc, sizeof(rc), 0);
-    if (ret == -1) {
-        perror("syscall send failed");
-        exit(EXIT_FAILURE);
-    }
-}
-
 void remote_send_errno(int arg) {
     remote_send_int(arg);
-}
-
-void remote_send_int(int arg) {
-    int ret = send(remote_conn, &arg, sizeof(arg), 0);
-    if (ret == -1) {
-        perror("sending int argument failed");
-        exit(EXIT_FAILURE);
-    }
-}
-
-void remote_send_size_t(size_t arg) {
-    int ret = send(remote_conn, &arg, sizeof(arg), 0);
-    if (ret == -1) {
-        perror("sending size_t argument failed");
-        exit(EXIT_FAILURE);
-    }
 }
 
 void remote_send_string(const char *string) {
@@ -121,16 +125,6 @@ void remote_send_data(void *src, size_t len) {
     }
 }
 
-rc_type remote_recv_syscall() {
-    rc_type res = 0;
-    int ret = recv_all(remote_conn, &res, sizeof(res), 0);
-    if (ret == -1) {
-        perror("receiving syscall failed");
-        exit(EXIT_FAILURE);
-    }
-    return res;
-}
-
 char* remote_recv_string() {
     size_t len = remote_recv_size_t();
     char *res = malloc(len);
@@ -149,26 +143,6 @@ void remote_recv_data(void *dest, size_t len) {
         perror("receiving data failed");
         exit(EXIT_FAILURE);
     }
-}
-
-size_t remote_recv_size_t() {
-    size_t res = 0;
-    int ret = recv_all(remote_conn, &res, sizeof(res), 0);
-    if (ret == -1) {
-        perror("receiving size_t failed");
-        exit(EXIT_FAILURE);
-    }
-    return res;
-}
-
-int remote_recv_int() {
-    int res = 0;
-    int ret = recv_all(remote_conn, &res, sizeof(ret), 0);
-    if (ret == -1) {
-        perror("receiving int failed");
-        exit(EXIT_FAILURE);
-    }
-    return res;
 }
 
 int remote_recv_errno() {
