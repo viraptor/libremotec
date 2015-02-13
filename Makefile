@@ -3,7 +3,7 @@ SERVER_OBJECTS=server.o network.o
 CFLAGS=-fPIC -Wall -Wextra -std=gnu11
 LDFLAGS=-fPIC -ldl
 
-all: libremotec.so server test
+all: libremotec.so server
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
