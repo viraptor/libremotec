@@ -32,9 +32,10 @@
 static int remote_conn = -1;
 
 static ssize_t recv_all(int socket, void *buffer, size_t length, int flags) {
+    char *addressable = buffer;
     size_t total = 0;
     while (total < length) {
-        int ret = recv(socket, buffer + total, length - total, flags);
+        int ret = recv(socket, addressable + total, length - total, flags);
         if (ret == -1) {
             return ret;
         } else if (ret == 0) {
