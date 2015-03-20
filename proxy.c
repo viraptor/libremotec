@@ -24,6 +24,7 @@ typedef int (*orig_open_f_type)(const char *pathname, int flags);
 typedef int (*orig_fxstat_f_type)(int ver, int fildes, struct stat *buf);
 typedef int (*orig_close_f_type)(int fildes);
 typedef int (*orig_read_f_type)(int fildes, void *buf, size_t nbyte);
+typedef int (*orig_lseek_f_type)(int fildes, off_t offset, int whence);
 
 static bool debug;
 
@@ -90,6 +91,19 @@ static int call_remote_read(int fildes, void *buf, size_t nbyte) {
         remote_errno = remote_recv_errno();
     } else if (ret > 0) {
         remote_recv_data(buf, ret);
+    }
+    return ret;
+}
+
+static int call_remote_lseek(int fildes, off_t offset, int whence) {
+    remote_ensure();
+    remote_send_syscall(RC_LSEEK);
+    remote_send_int(fildes);
+    remote_send_off_t(offset);
+    remote_send_int(whence);
+    int ret = remote_recv_int();
+    if (ret == -1) {
+        remote_errno = remote_recv_errno();
     }
     return ret;
 }
@@ -241,6 +255,29 @@ ssize_t read(int fildes, void *buf, size_t nbyte) {
         // remote part
         int remote_fd = remote_fds[fildes - REMOTE_FD_SHIFT];
         int ret = call_remote_read(remote_fd, buf, nbyte);
+        if (ret == -1) {
+            errno = remote_errno;
+        }
+        return ret;
+    }
+}
+
+off_t lseek(int fildes, off_t offset, int whence) {
+    static orig_lseek_f_type orig_lseek = NULL;
+    if (orig_lseek == NULL) {
+        orig_lseek = (orig_lseek_f_type)dlsym(RTLD_NEXT, "lseek");
+    }
+
+    if (fildes < REMOTE_FD_SHIFT) {
+        // local part
+        return orig_lseek(fildes, offset, whence);
+    } else {
+        if (debug) {
+            fprintf(stderr, "lseek() offset %i from %i\n", offset, whence);
+        }
+        // remote part
+        int remote_fd = remote_fds[fildes - REMOTE_FD_SHIFT];
+        int ret = call_remote_lseek(remote_fd, offset, whence);
         if (ret == -1) {
             errno = remote_errno;
         }

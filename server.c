@@ -39,6 +39,17 @@ static void handle_close() {
     }
 }
 
+static void handle_lseek() {
+    int fd = remote_recv_int();
+    off_t offset = remote_recv_off_t();
+    int whence = remote_recv_int();
+    int ret = lseek(fd, offset, whence);
+    remote_send_int(ret);
+    if (ret == -1) {
+        remote_send_errno(errno);
+    }
+}
+
 static void handle_read() {
     int fd = remote_recv_int();
     int len = remote_recv_size_t();
@@ -68,6 +79,9 @@ int main() {
                 break;
             case RC_READ:
                 handle_read();
+                break;
+            case RC_LSEEK:
+                handle_lseek();
                 break;
             default:
                 printf("Unknown syscall\n");

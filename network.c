@@ -48,10 +48,12 @@ static ssize_t recv_all(int socket, void *buffer, size_t length, int flags) {
 
 GEN_SEND_GENERIC(rc_type, syscall)
 GEN_SEND_GENERIC(int, int)
+GEN_SEND_GENERIC(off_t, off_t)
 GEN_SEND_GENERIC(size_t, size_t)
 
 GEN_RECV_GENERIC(rc_type, syscall)
 GEN_RECV_GENERIC(size_t, size_t)
+GEN_RECV_GENERIC(off_t, off_t)
 GEN_RECV_GENERIC(int, int)
 
 void remote_ensure() {
