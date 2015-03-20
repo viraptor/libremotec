@@ -66,6 +66,9 @@ void remote_ensure() {
     }
 
     const char *host = getenv("REMOTE_SERVER");
+    if (!host) {
+        error(1, 0, "fatal: REMOTE_SERVER variable not set");
+    }
     struct sockaddr_in server_addr = {.sin_family = AF_INET, .sin_port = htons(12345)};
     inet_pton(AF_INET, host, &server_addr.sin_addr);
     if (connect(remote_conn, (struct sockaddr *) &server_addr, sizeof(server_addr)) == -1) {
