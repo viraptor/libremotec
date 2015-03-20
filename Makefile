@@ -1,6 +1,6 @@
 PROXY_OBJECTS=proxy.o network.o
 SERVER_OBJECTS=server.o network.o
-CFLAGS=-fPIC -Wall -Wextra -std=gnu11 -Wpointer-arith
+CFLAGS=-fPIC -Wall -Wextra -std=gnu11 -Wpointer-arith -g
 LDFLAGS=-fPIC -ldl
 
 all: libremotec.so server

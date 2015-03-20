@@ -25,6 +25,16 @@ typedef int (*orig_fxstat_f_type)(int ver, int fildes, struct stat *buf);
 typedef int (*orig_close_f_type)(int fildes);
 typedef int (*orig_read_f_type)(int fildes, void *buf, size_t nbyte);
 
+static bool debug;
+
+static void __attribute__((constructor)) initialise() {
+    if (getenv("LIBREMOTEC_DEBUG"))
+        debug = true;
+    else
+        debug = false;
+
+}
+
 static int find_free_remote_fd() {
     for (int i=0; i<REMOTE_MAX_OPEN; i++) {
         if (!remote_fds[i]) {
@@ -121,16 +131,13 @@ void prepare_local_paths() {
 }
 
 static bool is_local_path(const char* pathname) {
-printf("opening: %s\n", pathname);
     for (int i=0; i<local_paths_count; i++) {
         if (strncmp(pathname, local_paths_array[i], local_paths_len[i]) == 0 && (
                 local_paths_array[i][local_paths_len[i]] == '/' ||
                 local_paths_array[i][local_paths_len[i]] == 0)) {
-            printf("it's local\n");
             return true;
         }
     }
-    printf("it's remote\n");
     return false;
 }
 
@@ -145,6 +152,10 @@ int open(const char *pathname, int flags, ...) {
         // local part
         return orig_open(pathname, flags);
     } else {
+        if (debug) {
+            fprintf(stderr, "open() on remote file %s\n", pathname);
+        }
+
         // remote part
         int remote_fd_idx = find_free_remote_fd();
         if (remote_fd_idx == -1) {
@@ -154,10 +165,16 @@ int open(const char *pathname, int flags, ...) {
 
         int remote_fd = call_remote_open(pathname, flags);
         if (remote_fd == -1) {
+            if (debug) {
+                fprintf(stderr, "failed opening %s\n", pathname);
+            }
             errno = remote_errno;
             return -1;
         }
 
+        if (debug) {
+            fprintf(stderr, "opened %s, local %i, remote %i\n", pathname, remote_fd_idx + REMOTE_FD_SHIFT, remote_fd);
+        }
         remote_fds[remote_fd_idx] = remote_fd;
         return remote_fd_idx + REMOTE_FD_SHIFT;
     }
@@ -173,6 +190,9 @@ int __fxstat(int ver, int fildes, struct stat *buf) {
         // local part
         return orig_fxstat(ver, fildes, buf);
     } else {
+        if (debug) {
+            fprintf(stderr, "stat() on remote fd %i\n", fildes);
+        }
         // remote part
         int remote_fd = remote_fds[fildes - REMOTE_FD_SHIFT];
         int ret = call_remote_fstat(remote_fd, buf);
@@ -215,6 +235,9 @@ ssize_t read(int fildes, void *buf, size_t nbyte) {
         // local part
         return orig_read(fildes, buf, nbyte);
     } else {
+        if (debug) {
+            fprintf(stderr, "read() %zi bytes on remote fd %i\n", nbyte, fildes);
+        }
         // remote part
         int remote_fd = remote_fds[fildes - REMOTE_FD_SHIFT];
         int ret = call_remote_read(remote_fd, buf, nbyte);
