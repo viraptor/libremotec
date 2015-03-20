@@ -43,8 +43,8 @@ static void handle_lseek() {
     int fd = remote_recv_int();
     off_t offset = remote_recv_off_t();
     int whence = remote_recv_int();
-    int ret = lseek(fd, offset, whence);
-    remote_send_int(ret);
+    off_t ret = lseek(fd, offset, whence);
+    remote_send_off_t(ret);
     if (ret == -1) {
         remote_send_errno(errno);
     }
