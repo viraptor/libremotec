@@ -1,6 +1,9 @@
 #define _GNU_SOURCE
 #include <dlfcn.h>
 
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -9,10 +12,13 @@
 #define REMOTE_MAX_OPEN 10
 #define REMOTE_FD_SHIFT 2048
 
-#define TEST_PATH "/etc/passwd"
-
 static int remote_fds[REMOTE_MAX_OPEN] = {0};
 static int remote_errno;
+
+static int local_paths_count;
+static char* local_paths = NULL;
+static char** local_paths_array = NULL;
+static int* local_paths_len = NULL;
 
 typedef int (*orig_open_f_type)(const char *pathname, int flags);
 typedef int (*orig_fxstat_f_type)(int ver, int fildes, struct stat *buf);
@@ -78,13 +84,64 @@ static int call_remote_read(int fildes, void *buf, size_t nbyte) {
     return ret;
 }
 
+void prepare_local_paths() {
+    char *paths = getenv("LOCAL_PATHS");
+
+    local_paths_count = 0;
+    if (!paths)
+        return;
+
+    local_paths = strdup(paths);
+    size_t len = strlen(local_paths);
+
+    local_paths_count++;
+    for (size_t i=0; i<len; i++) {
+        if (local_paths[i] == ':') {
+            local_paths_count++;
+        }
+    }
+
+    local_paths_array = calloc(local_paths_count, sizeof(*local_paths_array));
+    local_paths_len = calloc(local_paths_count, sizeof(*local_paths_len));
+
+    int path_num = 1;
+    local_paths_array[0] = local_paths;
+    for (size_t i=0; i<len; i++) {
+        if (local_paths[i] == ':') {
+            local_paths[i] = 0;
+            i++;
+            if (local_paths[i] != 0) {
+                local_paths_array[path_num] = local_paths + i;
+                local_paths_len[path_num-1] = local_paths_array[path_num] - local_paths_array[path_num-1] -1;
+                path_num++;
+            }
+        }
+    }
+    local_paths_len[path_num-1] = local_paths + len - local_paths_array[path_num-1];
+}
+
+static bool is_local_path(const char* pathname) {
+printf("opening: %s\n", pathname);
+    for (int i=0; i<local_paths_count; i++) {
+        if (strncmp(pathname, local_paths_array[i], local_paths_len[i]) == 0 && (
+                local_paths_array[i][local_paths_len[i]] == '/' ||
+                local_paths_array[i][local_paths_len[i]] == 0)) {
+            printf("it's local\n");
+            return true;
+        }
+    }
+    printf("it's remote\n");
+    return false;
+}
+
 int open(const char *pathname, int flags, ...) {
     static orig_open_f_type orig_open = NULL;
     if (orig_open == NULL) {
         orig_open = (orig_open_f_type)dlsym(RTLD_NEXT, "open");
+        prepare_local_paths();
     }
 
-    if (strncmp(pathname, TEST_PATH, sizeof TEST_PATH - 1)) {
+    if (is_local_path(pathname)) {
         // local part
         return orig_open(pathname, flags);
     } else {
