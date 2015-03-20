@@ -7,6 +7,7 @@ typedef enum {
     RC_CLOSE,
     RC_READ,
     RC_LSEEK,
+    RC_FACCESSAT,
 } rc_type;
 
 void remote_ensure();

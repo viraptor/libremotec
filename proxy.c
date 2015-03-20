@@ -7,6 +7,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include "network.h"
 
 #define REMOTE_MAX_OPEN 10
@@ -25,6 +26,7 @@ typedef int (*orig_fxstat_f_type)(int ver, int fildes, struct stat *buf);
 typedef int (*orig_close_f_type)(int fildes);
 typedef int (*orig_read_f_type)(int fildes, void *buf, size_t nbyte);
 typedef int (*orig_lseek_f_type)(int fildes, off_t offset, int whence);
+typedef int (*orig_faccessat_f_type)(int fd, const char *path, int amode, int flag);
 
 static bool debug;
 
@@ -101,6 +103,20 @@ static int call_remote_lseek(int fildes, off_t offset, int whence) {
     remote_send_int(fildes);
     remote_send_off_t(offset);
     remote_send_int(whence);
+    int ret = remote_recv_int();
+    if (ret == -1) {
+        remote_errno = remote_recv_errno();
+    }
+    return ret;
+}
+
+static int call_remote_faccessat(int fd, const char *path, int amode, int flag) {
+    remote_ensure();
+    remote_send_syscall(RC_FACCESSAT);
+    remote_send_int(fd);
+    remote_send_string(path);
+    remote_send_int(amode);
+    remote_send_int(flag);
     int ret = remote_recv_int();
     if (ret == -1) {
         remote_errno = remote_recv_errno();
@@ -278,6 +294,36 @@ off_t lseek(int fildes, off_t offset, int whence) {
         // remote part
         int remote_fd = remote_fds[fildes - REMOTE_FD_SHIFT];
         int ret = call_remote_lseek(remote_fd, offset, whence);
+        if (ret == -1) {
+            errno = remote_errno;
+        }
+        return ret;
+    }
+}
+
+int faccessat(int fd, const char *path, int amode, int flag) {
+    static orig_faccessat_f_type orig_faccessat = NULL;
+    if (orig_faccessat == NULL) {
+        orig_faccessat = (orig_faccessat_f_type)dlsym(RTLD_NEXT, "faccessat");
+    }
+
+    // this may be wrong in some scenarios, because we never know which
+    // side's AT_FDCWD is expected
+    if ((fd != AT_FDCWD && fd < REMOTE_FD_SHIFT) || (fd == AT_FDCWD && is_local_path(path))) {
+        // local part
+        return orig_faccessat(fd, path, amode, flag);
+    } else {
+        if (debug) {
+            fprintf(stderr, "faccessat() fd %i path %s\n", fd, path);
+        }
+        // remote part
+        int remote_fd;
+        if (fd != AT_FDCWD) {
+            remote_fd = remote_fds[fd - REMOTE_FD_SHIFT];
+        } else {
+            remote_fd = AT_FDCWD;
+        }
+        int ret = call_remote_faccessat(remote_fd, path, amode, flag);
         if (ret == -1) {
             errno = remote_errno;
         }

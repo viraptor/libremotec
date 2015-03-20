@@ -64,6 +64,18 @@ static void handle_read() {
     free(data);
 }
 
+static void handle_faccessat() {
+    int fd = remote_recv_int();
+    char *path = remote_recv_string();
+    int amode = remote_recv_int();
+    int flag = remote_recv_int();
+    int ret = faccessat(fd, path, amode, flag);
+    remote_send_int(ret);
+    if (ret == -1) {
+        remote_send_errno(errno);
+    }
+}
+
 int main() {
     remote_listen();
     while (true) {
@@ -82,6 +94,9 @@ int main() {
                 break;
             case RC_LSEEK:
                 handle_lseek();
+                break;
+            case RC_FACCESSAT:
+                handle_faccessat();
                 break;
             default:
                 printf("Unknown syscall\n");
