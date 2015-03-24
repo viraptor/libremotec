@@ -290,6 +290,7 @@ off_t lseek(int fildes, off_t offset, int whence) {
 int faccessat(int fd, const char *path, int amode, int flag) {
     // this may be wrong in some scenarios, because we never know which
     // side's AT_FDCWD is expected
+    // TODO: actually we can figure that out by making the path absolute...
     if ((fd != AT_FDCWD && fd < REMOTE_FD_SHIFT) || (fd == AT_FDCWD && is_local_path(path))) {
         // local part
         return orig_faccessat(fd, path, amode, flag);
