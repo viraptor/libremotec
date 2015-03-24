@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
 
 static void handle_open() {
     char *path = remote_recv_string();
@@ -89,6 +90,25 @@ static void handle_faccessat() {
     }
 }
 
+static void handle_getxattr() {
+    char *path = remote_recv_string();
+    char *name = remote_recv_string();
+    size_t size = remote_recv_size_t();
+    void *value = NULL;
+    if (size > 0)
+        value = malloc(size);
+    int ret = getxattr(path, name, value, size);
+    free(path);
+    free(name);
+    remote_send_int(ret);
+    if (ret == -1) {
+        remote_send_errno(errno);
+    } else {
+        remote_send_data(value, size);
+    }
+    free(value);
+}
+
 int main() {
     remote_listen();
     while (true) {
@@ -113,6 +133,9 @@ int main() {
                 break;
             case RC_FACCESSAT:
                 handle_faccessat();
+                break;
+            case RC_GETXATTR:
+                handle_getxattr();
                 break;
             default:
                 printf("Unknown syscall\n");

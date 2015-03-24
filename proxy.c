@@ -28,6 +28,7 @@ int (*orig_close)(int fildes);
 int (*orig_read)(int fildes, void *buf, size_t nbyte);
 off_t (*orig_lseek)(int fildes, off_t offset, int whence);
 int (*orig_faccessat)(int fd, const char *path, int amode, int flag);
+int (*orig_getxattr)(const char *path, const char *name, void *value, size_t size);
 
 static bool debug;
 
@@ -44,6 +45,7 @@ static void __attribute__((constructor)) initialise() {
     orig_read = dlsym(RTLD_NEXT, "read");
     orig_lseek = dlsym(RTLD_NEXT, "lseek");
     orig_faccessat = dlsym(RTLD_NEXT, "faccessat");
+    orig_getxattr = dlsym(RTLD_NEXT, "getxattr");
 }
 
 static int find_free_remote_fd() {
@@ -141,6 +143,21 @@ static int call_remote_faccessat(int fd, const char *path, int amode, int flag) 
     int ret = remote_recv_int();
     if (ret == -1) {
         remote_errno = remote_recv_errno();
+    }
+    return ret;
+}
+
+static int call_remote_getxattr(const char *path, const char *name, void *value, size_t size) {
+    remote_ensure();
+    remote_send_syscall(RC_GETXATTR);
+    remote_send_string(path);
+    remote_send_string(name);
+    remote_send_size_t(size);
+    int ret = remote_recv_int();
+    if (ret == -1) {
+        remote_errno = remote_recv_errno();
+    } else {
+        remote_recv_data(value, size);
     }
     return ret;
 }
@@ -338,6 +355,23 @@ int faccessat(int fd, const char *path, int amode, int flag) {
             remote_fd = AT_FDCWD;
         }
         int ret = call_remote_faccessat(remote_fd, path, amode, flag);
+        if (ret == -1) {
+            errno = remote_errno;
+        }
+        return ret;
+    }
+}
+
+int getxattr(const char *path, const char *name, void *value, size_t size) {
+    if (is_local_path(path)) {
+        // local part
+        return orig_getxattr(path, name, value, size);
+    } else {
+        if (debug) {
+            fprintf(stderr, "getxattr() on remote file %s\n", path);
+        }
+        // remote part
+        int ret = call_remote_getxattr(path, name, value, size);
         if (ret == -1) {
             errno = remote_errno;
         }
