@@ -4,6 +4,7 @@
 typedef enum {
     RC_OPEN,
     RC_FSTAT,
+    RC_LSTAT,
     RC_CLOSE,
     RC_READ,
     RC_LSEEK,

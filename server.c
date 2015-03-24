@@ -30,6 +30,19 @@ static void handle_fstat() {
     }
 }
 
+static void handle_lstat() {
+    struct stat buf;
+    char *path = remote_recv_string();
+    int ret = lstat(path, &buf);
+    free(path);
+    remote_send_int(ret);
+    if (ret == -1) {
+        remote_send_errno(errno);
+    } else {
+        remote_send_data(&buf, sizeof(buf));
+    }
+}
+
 static void handle_close() {
     int fd = remote_recv_int();
     int ret = close(fd);
@@ -85,6 +98,9 @@ int main() {
                 break;
             case RC_FSTAT:
                 handle_fstat();
+                break;
+            case RC_LSTAT:
+                handle_lstat();
                 break;
             case RC_CLOSE:
                 handle_close();

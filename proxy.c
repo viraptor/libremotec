@@ -23,6 +23,7 @@ static int* local_paths_len = NULL;
 
 int (*orig_open)(const char *pathname, int flags);
 int (*orig_fxstat)(int ver, int fildes, struct stat *buf);
+int (*orig_lxstat)(int ver, const char *path, struct stat *buf);
 int (*orig_close)(int fildes);
 int (*orig_read)(int fildes, void *buf, size_t nbyte);
 off_t (*orig_lseek)(int fildes, off_t offset, int whence);
@@ -38,6 +39,7 @@ static void __attribute__((constructor)) initialise() {
 
     orig_open = dlsym(RTLD_NEXT, "open");
     orig_fxstat = dlsym(RTLD_NEXT, "__fxstat");
+    orig_lxstat = dlsym(RTLD_NEXT, "__lxstat");
     orig_close = dlsym(RTLD_NEXT, "close");
     orig_read = dlsym(RTLD_NEXT, "read");
     orig_lseek = dlsym(RTLD_NEXT, "lseek");
@@ -69,6 +71,19 @@ static int call_remote_fstat(int fildes, struct stat *buf) {
     remote_ensure();
     remote_send_syscall(RC_FSTAT);
     remote_send_int(fildes);
+    int ret = remote_recv_int();
+    if (ret == -1) {
+        remote_errno = remote_recv_errno();
+    } else {
+        remote_recv_data(buf, sizeof(*buf));
+    }
+    return ret;
+}
+
+static int call_remote_lstat(const char *path, struct stat *buf) {
+    remote_ensure();
+    remote_send_syscall(RC_LSTAT);
+    remote_send_string(path);
     int ret = remote_recv_int();
     if (ret == -1) {
         remote_errno = remote_recv_errno();
@@ -222,11 +237,28 @@ int __fxstat(int ver, int fildes, struct stat *buf) {
         return orig_fxstat(ver, fildes, buf);
     } else {
         if (debug) {
-            fprintf(stderr, "stat() on remote fd %i\n", fildes);
+            fprintf(stderr, "fstat() on remote fd %i\n", fildes);
         }
         // remote part
         int remote_fd = remote_fds[fildes - REMOTE_FD_SHIFT];
         int ret = call_remote_fstat(remote_fd, buf);
+        if (ret == -1) {
+            errno = remote_errno;
+        }
+        return ret;
+    }
+}
+
+int __lxstat(int ver, const char *path, struct stat *buf) {
+    if (is_local_path(path)) {
+        // local part
+        return orig_lxstat(ver, path, buf);
+    } else {
+        if (debug) {
+            fprintf(stderr, "lstat() on remote file %s\n", path);
+        }
+        // remote part
+        int ret = call_remote_lstat(path, buf);
         if (ret == -1) {
             errno = remote_errno;
         }
