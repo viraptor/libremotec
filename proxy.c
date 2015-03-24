@@ -21,12 +21,12 @@ static char* local_paths = NULL;
 static char** local_paths_array = NULL;
 static int* local_paths_len = NULL;
 
-typedef int (*orig_open_f_type)(const char *pathname, int flags);
-typedef int (*orig_fxstat_f_type)(int ver, int fildes, struct stat *buf);
-typedef int (*orig_close_f_type)(int fildes);
-typedef int (*orig_read_f_type)(int fildes, void *buf, size_t nbyte);
-typedef off_t (*orig_lseek_f_type)(int fildes, off_t offset, int whence);
-typedef int (*orig_faccessat_f_type)(int fd, const char *path, int amode, int flag);
+int (*orig_open)(const char *pathname, int flags);
+int (*orig_fxstat)(int ver, int fildes, struct stat *buf);
+int (*orig_close)(int fildes);
+int (*orig_read)(int fildes, void *buf, size_t nbyte);
+off_t (*orig_lseek)(int fildes, off_t offset, int whence);
+int (*orig_faccessat)(int fd, const char *path, int amode, int flag);
 
 static bool debug;
 
@@ -36,6 +36,12 @@ static void __attribute__((constructor)) initialise() {
     else
         debug = false;
 
+    orig_open = dlsym(RTLD_NEXT, "open");
+    orig_fxstat = dlsym(RTLD_NEXT, "__fxstat");
+    orig_close = dlsym(RTLD_NEXT, "close");
+    orig_read = dlsym(RTLD_NEXT, "read");
+    orig_lseek = dlsym(RTLD_NEXT, "lseek");
+    orig_faccessat = dlsym(RTLD_NEXT, "faccessat");
 }
 
 static int find_free_remote_fd() {
@@ -125,6 +131,10 @@ static int call_remote_faccessat(int fd, const char *path, int amode, int flag) 
 }
 
 void prepare_local_paths() {
+    // initialise only once
+    if (local_paths_array)
+        return;
+
     char *paths = getenv("LOCAL_PATHS");
 
     local_paths_count = 0;
@@ -172,11 +182,7 @@ static bool is_local_path(const char* pathname) {
 }
 
 int open(const char *pathname, int flags, ...) {
-    static orig_open_f_type orig_open = NULL;
-    if (orig_open == NULL) {
-        orig_open = (orig_open_f_type)dlsym(RTLD_NEXT, "open");
-        prepare_local_paths();
-    }
+    prepare_local_paths();
 
     if (is_local_path(pathname)) {
         // local part
@@ -211,11 +217,6 @@ int open(const char *pathname, int flags, ...) {
 }
 
 int __fxstat(int ver, int fildes, struct stat *buf) {
-    static orig_fxstat_f_type orig_fxstat = NULL;
-    if (orig_fxstat == NULL) {
-        orig_fxstat = (orig_fxstat_f_type)dlsym(RTLD_NEXT, "__fxstat");
-    }
-
     if (fildes < REMOTE_FD_SHIFT) {
         // local part
         return orig_fxstat(ver, fildes, buf);
@@ -234,11 +235,6 @@ int __fxstat(int ver, int fildes, struct stat *buf) {
 }
 
 int close(int fildes) {
-    static orig_close_f_type orig_close = NULL;
-    if (orig_close == NULL) {
-        orig_close = (orig_close_f_type)dlsym(RTLD_NEXT, "close");
-    }
-
     if (fildes < REMOTE_FD_SHIFT) {
         // local part
         return orig_close(fildes);
@@ -256,11 +252,6 @@ int close(int fildes) {
 }
 
 ssize_t read(int fildes, void *buf, size_t nbyte) {
-    static orig_read_f_type orig_read = NULL;
-    if (orig_read == NULL) {
-        orig_read = (orig_read_f_type)dlsym(RTLD_NEXT, "read");
-    }
-
     if (fildes < REMOTE_FD_SHIFT) {
         // local part
         return orig_read(fildes, buf, nbyte);
@@ -279,11 +270,6 @@ ssize_t read(int fildes, void *buf, size_t nbyte) {
 }
 
 off_t lseek(int fildes, off_t offset, int whence) {
-    static orig_lseek_f_type orig_lseek = NULL;
-    if (orig_lseek == NULL) {
-        orig_lseek = (orig_lseek_f_type)dlsym(RTLD_NEXT, "lseek");
-    }
-
     if (fildes < REMOTE_FD_SHIFT) {
         // local part
         return orig_lseek(fildes, offset, whence);
@@ -302,11 +288,6 @@ off_t lseek(int fildes, off_t offset, int whence) {
 }
 
 int faccessat(int fd, const char *path, int amode, int flag) {
-    static orig_faccessat_f_type orig_faccessat = NULL;
-    if (orig_faccessat == NULL) {
-        orig_faccessat = (orig_faccessat_f_type)dlsym(RTLD_NEXT, "faccessat");
-    }
-
     // this may be wrong in some scenarios, because we never know which
     // side's AT_FDCWD is expected
     if ((fd != AT_FDCWD && fd < REMOTE_FD_SHIFT) || (fd == AT_FDCWD && is_local_path(path))) {
