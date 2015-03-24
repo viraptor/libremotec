@@ -186,6 +186,8 @@ void prepare_local_paths() {
 }
 
 static bool is_local_path(const char* pathname) {
+    prepare_local_paths();
+
     for (int i=0; i<local_paths_count; i++) {
         if (strncmp(pathname, local_paths_array[i], local_paths_len[i]) == 0 && (
                 local_paths_array[i][local_paths_len[i]] == '/' ||
@@ -197,8 +199,6 @@ static bool is_local_path(const char* pathname) {
 }
 
 int open(const char *pathname, int flags, ...) {
-    prepare_local_paths();
-
     if (is_local_path(pathname)) {
         // local part
         return orig_open(pathname, flags);
