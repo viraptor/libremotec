@@ -109,37 +109,26 @@ static void handle_getxattr() {
     free(value);
 }
 
+typedef void (*handler_t)(void);
+static handler_t handlers[TOTAL_RC_COUNT] = {
+    [RC_OPEN] = &handle_open,
+    [RC_FSTAT] = &handle_fstat,
+    [RC_LSTAT] = &handle_lstat,
+    [RC_CLOSE] = &handle_close,
+    [RC_READ] = &handle_read,
+    [RC_LSEEK] = &handle_lseek,
+    [RC_FACCESSAT] = &handle_faccessat,
+    [RC_GETXATTR] = &handle_getxattr,
+};
+
 int main() {
     remote_listen();
     while (true) {
-        switch(remote_recv_syscall()) {
-            case RC_OPEN:
-                handle_open();
-                break;
-            case RC_FSTAT:
-                handle_fstat();
-                break;
-            case RC_LSTAT:
-                handle_lstat();
-                break;
-            case RC_CLOSE:
-                handle_close();
-                break;
-            case RC_READ:
-                handle_read();
-                break;
-            case RC_LSEEK:
-                handle_lseek();
-                break;
-            case RC_FACCESSAT:
-                handle_faccessat();
-                break;
-            case RC_GETXATTR:
-                handle_getxattr();
-                break;
-            default:
-                printf("Unknown syscall\n");
-                exit(1);
+        rc_type call = remote_recv_syscall();
+        if (call >= TOTAL_RC_COUNT) {
+            printf("Unknown syscall\n");
+            exit(1);
         }
+        handlers[call]();
     }
 }

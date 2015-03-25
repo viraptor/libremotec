@@ -10,6 +10,7 @@ typedef enum {
     RC_LSEEK,
     RC_FACCESSAT,
     RC_GETXATTR,
+    TOTAL_RC_COUNT,
 } rc_type;
 
 void remote_ensure();
